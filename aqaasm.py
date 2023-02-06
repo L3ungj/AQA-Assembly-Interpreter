@@ -2,38 +2,57 @@ NUM_REGISTERS = 13
 NUM_MEM = 1000
 
 
-class Assembly:
+class AQAAssemblyInterpreter:
     def __init__(self):
         self.registers = [0] * NUM_REGISTERS
         self.memory = [0] * NUM_MEM
         self.cmp_left = None
         self.cmp_right = None
+        self.cur_line_num = 0
+
+    def _get_memory_number(self, mem):
+        try:
+            mem_num = int(mem)
+        except Exception:
+            raise Exception(f'Invalid memory address at line {self.cur_line_num}')
+        if mem_num >= NUM_MEM:
+            raise Exception(f'Memory address out of range at line {self.cur_line_num}')
+        return mem_num
 
     def set_memory(self, mem, val):
-        if mem >= NUM_MEM:
-            raise Exception('Memory address invalid')
-        self.memory[mem] = val
+        mem_num = self._get_memory_number(mem)
+        self.memory[mem_num] = val
 
     def get_memory(self, mem):
-        if mem >= NUM_MEM:
-            raise Exception('Memory address invalid')
-        return self.memory[mem]
+        mem_num = self._get_memory_number(mem)
+        return self.memory[mem_num]
+
+    def _get_register_number(self, reg):
+        try:
+            reg_num = int(reg[1:])
+        except Exception:
+            raise Exception(f'Invalid register number at line {self.cur_line_num}')
+        if reg_num >= NUM_REGISTERS:
+            raise Exception(f'Register number out of range at line {self.cur_line_num}')
+        return reg_num
 
     def set_register(self, reg, val):
-        if reg >= NUM_MEM:
-            raise Exception('Register number invalid')
-        self.registers[reg] = val
+        reg_num = self._get_register_number(reg)
+        self.registers[reg_num] = val
 
     def get_register(self, reg):
-        if reg >= NUM_MEM:
-            raise Exception('Register number invalid')
-        return self.registers[reg]
+        reg_num = self._get_register_number(reg)
+        return self.registers[reg_num]
 
     def get_operand(self, operand):
         if operand[0] == 'R':
             return self.get_register(operand)
         elif operand[0] == '#':
-            return int(operand[1:])
+            try:
+                res = int(operand[1:])
+            except Exception:
+                raise Exception(f'Invalid operand at line {self.cur_line_num}')
+            return res
 
     def _ldr(self, reg, mem):
         self.set_register(reg, self.get_memory(mem))
@@ -56,16 +75,24 @@ class Assembly:
         self.cmp_left = self.get_register(reg)
         self.cmp_right = self.get_operand(operand)
 
-    def _eq(self):  # ! raise
+    def _eq(self):
+        if self.cmp_left is None or self.cmp_right is None:
+            raise Exception(f'CMP not called before BEQ at line {self.cur_line_num}')
         return self.cmp_left == self.cmp_right
 
     def _ne(self):
+        if self.cmp_left is None or self.cmp_right is None:
+            raise Exception(f'CMP not called before BNE at line {self.cur_line_num}')
         return self.cmp_left != self.cmp_right
 
     def _gt(self):
+        if self.cmp_left is None or self.cmp_right is None:
+            raise Exception(f'CMP not called before BGT at line {self.cur_line_num}')
         return self.cmp_left > self.cmp_right
 
     def _lt(self):
+        if self.cmp_left is None or self.cmp_right is None:
+            raise Exception(f'CMP not called before BLT at line {self.cur_line_num}')
         return self.cmp_left < self.cmp_right
 
     def _and(self, reg, reg2, operand):
@@ -94,21 +121,46 @@ class Assembly:
 
     def run_code(self, code: str):
         code_lines = code.splitlines()
-        cur_line_num = 0
+        code_lines = [line.strip() for line in code_lines]
+        self.cur_line_num = 0
         branches = {}
         instructions = {
             'LDR': self._ldr,
-
+            'STR': self._str,
+            'ADD': self._add,
+            'SUB': self._sub,
+            'MOV': self._mov,
+            'CMP': self._cmp,
+            'AND': self._and,
+            'ORR': self._orr,
+            'EOR': self._eor,
+            'MVN': self._mvn,
+            'LSL': self._lsl,
+            'LSR': self._lsr,
+            'B': None,
+            'BEQ': None,
+            'BNE': None,
+            'BGT': None,
+            'BLT': None,
+            'HALT': None
         }
-
-        def branch(label: str):
-            pass
+        for line_num, line in enumerate(code_lines):
+            if line.endswith(':'):
+                branches[line[:-1]] = line_num + 1
+            
         while True:
-            cur_line = code_lines[cur_line_num]
-            instruction, args_raw = cur_line.split(' ', maxsplit=1)
+            cur_line = code_lines[self.cur_line_num]
+
+            if cur_line == '' or ':' in cur_line:
+                self.cur_line_num += 1
+                continue
+
+            cur_line_split = cur_line.split(' ', maxsplit=1)
+            instruction = cur_line_split[0]
+            args_raw = None if len(cur_line_split) == 1 else cur_line_split[1]
             
             if instruction not in instructions:
-                raise Exception('Unknown instruction')
+                raise Exception(f'Unknown instruction at line {self.cur_line_num}')
                 
             if instruction == 'HALT':
                 return
@@ -118,9 +170,21 @@ class Assembly:
                     (instruction == 'BNE' and self._ne()) or \
                     (instruction == 'BGT' and self._gt()) or \
                         (instruction == 'BLT' and self._lt()):
-                    branch(args_raw)
+                    if args_raw not in branches:
+                        raise Exception(f'Invalid branch at line {self.cur_line_num}')
+                    self.cur_line_num = branches[args_raw]
             else:
                 func = instructions[instruction]
                 args = args_raw.split(',')
                 args = [arg.strip() for arg in args]
+                func(*args)
+            
+            self.cur_line_num += 1
 
+if __name__ == '__main__':
+    aqa = AQAAssemblyInterpreter()
+    with open('code.aqaasm', 'r') as f:
+        code = f.read()
+    aqa.set_memory('100', 10)
+    aqa.run_code(code)
+    print(aqa.get_memory('101'))
