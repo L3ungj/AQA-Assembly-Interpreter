@@ -157,6 +157,8 @@ class AQAAssemblyInterpreter:
                 branches[line[:-1]] = line_num + 1
 
         while True:
+            if self.cur_line_num >= len(code_lines):
+                raise Exception(f'No more instructions after line {self.cur_line_num}')
             cur_line = code_lines[self.cur_line_num]
 
             if cur_line == '' or ':' in cur_line:
