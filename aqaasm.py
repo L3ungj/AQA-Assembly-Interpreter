@@ -1,3 +1,4 @@
+from inspect import signature
 NUM_REGISTERS = 13
 NUM_MEM = 1000
 
@@ -13,7 +14,7 @@ class AQAAssemblyInterpreter:
     def _get_memory_number(self, mem):
         try:
             mem_num = int(mem)
-        except Exception:
+        except ValueError:
             raise Exception(
                 f'Invalid memory address at line {self.cur_line_num + 1}')
         if mem_num >= NUM_MEM:
@@ -30,9 +31,12 @@ class AQAAssemblyInterpreter:
         return self.memory[mem_num]
 
     def _get_register_number(self, reg):
+        if reg[0] != 'R':
+            raise Exception(
+                f'Invalid register at line {self.cur_line_num + 1}')
         try:
             reg_num = int(reg[1:])
-        except Exception:
+        except ValueError:
             raise Exception(
                 f'Invalid register number at line {self.cur_line_num + 1}')
         if reg_num >= NUM_REGISTERS:
@@ -54,8 +58,9 @@ class AQAAssemblyInterpreter:
         elif operand[0] == '#':
             try:
                 res = int(operand[1:])
-            except Exception:
-                raise Exception(f'Invalid operand at line {self.cur_line_num + 1}')
+            except ValueError:
+                raise Exception(
+                    f'Invalid operand at line {self.cur_line_num + 1}')
             return res
 
     def _ldr(self, reg, mem):
@@ -158,7 +163,8 @@ class AQAAssemblyInterpreter:
 
         while True:
             if self.cur_line_num >= len(code_lines):
-                raise Exception(f'No more instructions after line {self.cur_line_num}')
+                raise Exception(
+                    f'No more instructions after line {self.cur_line_num}')
             cur_line = code_lines[self.cur_line_num]
 
             if cur_line == '' or ':' in cur_line:
@@ -167,29 +173,41 @@ class AQAAssemblyInterpreter:
 
             cur_line_split = cur_line.split(' ', maxsplit=1)
             instruction = cur_line_split[0]
-            args_raw = None if len(cur_line_split) == 1 else cur_line_split[1]
+            args = [] if len(cur_line_split) == 1 else [arg.strip()
+                                                        for arg in cur_line_split[1].split(',')]
 
             if instruction not in instructions:
                 raise Exception(
                     f'Unknown instruction at line {self.cur_line_num + 1}')
 
             if instruction == 'HALT':
+                if len(args) != 0:
+                    raise Exception(
+                        f'No arguments needed for instruction HALT at line {self.cur_line_num + 1}')
                 return
             if instruction[0] == 'B':
+                if len(args) != 1:
+                    raise Exception(
+                        f'Only 1 argument is needed for instruction {instruction} at line {self.cur_line_num + 1}')
                 if instruction == 'B' or \
                     (instruction == 'BEQ' and self._eq()) or \
                     (instruction == 'BNE' and self._ne()) or \
                     (instruction == 'BGT' and self._gt()) or \
                         (instruction == 'BLT' and self._lt()):
-                    if args_raw not in branches:
+                    if args[0] not in branches:
                         raise Exception(
                             f'Invalid branch at line {self.cur_line_num + 1}')
-                    self.cur_line_num = branches[args_raw]
+                    self.cur_line_num = branches[args[0]]
                     continue
             else:
                 func = instructions[instruction]
-                args = args_raw.split(',')
-                args = [arg.strip() for arg in args]
+                num_args = len(signature(func).parameters)
+                if len(args) > num_args:
+                    raise Exception(
+                        f'Too many arguments (expected: {num_args}, you gave: {len(args)}) for instruction {instruction} at line {self.cur_line_num + 1}')
+                if len(args) < num_args:
+                    raise Exception(
+                        f'Too few arguments (expected: {num_args}, you gave: {len(args)}) for instruction {instruction} at line {self.cur_line_num + 1}')
                 try:
                     func(*args)
                 except Exception as e:
@@ -203,8 +221,8 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('file', help='AQAASM file to run')
-    parser.add_argument('-i', '--input', nargs='*', default=['100'])
-    parser.add_argument('-o', '--output', nargs='*', default=['101'])
+    parser.add_argument('-i', '--input', nargs='*', default=['100'], help='A list of memory addresses to input into')
+    parser.add_argument('-o', '--output', nargs='*', default=['101'], help='A list of memory addresses to print from')
     args = parser.parse_args()
 
     aqaai = AQAAssemblyInterpreter()
