@@ -23,7 +23,7 @@ class AQAAssemblyInterpreter:
 
     def set_memory(self, mem, val):
         mem_num = self._get_memory_number(mem)
-        self.memory[mem_num] = val
+        self.memory[mem_num] = val % 256
 
     def get_memory(self, mem):
         mem_num = self._get_memory_number(mem)
@@ -198,16 +198,18 @@ class AQAAssemblyInterpreter:
 
 
 if __name__ == '__main__':
-    import sys
-    if len(sys.argv) != 2:
-        print('Usage: python3 aqaasm.py <file>')
-        exit(1)
-    file_name = sys.argv[1]
-    input_ = int(input())
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('file', help='AQAASM file to run')
+    parser.add_argument('-i', '--input', nargs='*', default=['100'])
+    parser.add_argument('-o', '--output', nargs='*', default=['101'])
+    args = parser.parse_args()
 
     aqaai = AQAAssemblyInterpreter()
-    with open(file_name, 'r') as f:
+    with open(args.file, 'r') as f:
         code = f.read()
-    aqaai.set_memory('100', input_)
+    for input_address in args.input:
+        aqaai.set_memory(input_address, int(input()))
     aqaai.run_code(code)
-    print(aqaai.get_memory('101'))
+    for output_address in args.output:
+        print(aqaai.get_memory(output_address))
